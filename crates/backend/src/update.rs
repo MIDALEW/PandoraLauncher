@@ -1,11 +1,16 @@
-use std::{ffi::{OsStr, OsString}, io::Cursor, path::{Path, PathBuf}, sync::Arc};
+use std::{
+    ffi::{OsStr, OsString},
+    io::Cursor,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use base64::Engine;
 use bridge::{handle::FrontendHandle, message::MessageToFrontend, modal_action::ModalAction};
+use rand::RngCore;
 use reqwest::StatusCode;
 use schema::pandora_update::{UpdateInstallType, UpdateManifest, UpdatePrompt};
 use sha1::{Digest, Sha1};
-use rand::RngCore;
 
 use crate::directories::LauncherDirectories;
 
@@ -45,7 +50,10 @@ pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandl
     };
 
     if response.status() != StatusCode::OK {
-        send.send_error(format!("Unable to fetch Pandora update manifest, non-200 status code: {}", response.status()));
+        send.send_error(format!(
+            "Unable to fetch Pandora update manifest, non-200 status code: {}",
+            response.status()
+        ));
         return;
     }
 
@@ -79,7 +87,11 @@ pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandl
     } else if let Some(exes) = manifest.downloads.archs.get(std::env::consts::ARCH) {
         exes
     } else {
-        log::warn!("Unable to update, can't find arch \"{}\" in {:?}", std::env::consts::ARCH, manifest.downloads.archs.keys());
+        log::warn!(
+            "Unable to update, can't find arch \"{}\" in {:?}",
+            std::env::consts::ARCH,
+            manifest.downloads.archs.keys()
+        );
         return;
     };
 
@@ -90,7 +102,11 @@ pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandl
 
     let install_type_key = install_type.key();
     let Some(executable) = exes.exes.get(install_type_key) else {
-        log::warn!("Unable to update, installation type \"{}\" not in {:?}", install_type_key, exes.exes.keys());
+        log::warn!(
+            "Unable to update, installation type \"{}\" not in {:?}",
+            install_type_key,
+            exes.exes.keys()
+        );
         return;
     };
 
@@ -100,7 +116,7 @@ pub async fn check_for_updates(http_client: reqwest::Client, send: FrontendHandl
             new_version: manifest.version.clone(),
             install_type,
             exe: executable.clone(),
-        }
+        },
     });
 }
 
@@ -111,7 +127,9 @@ fn determine_update_install_type() -> Option<UpdateInstallType> {
 
     let current_exe = std::env::current_exe().ok()?;
 
-    if cfg!(target_os = "macos") && let Some(app) = determine_macos_app_path(&current_exe) {
+    if cfg!(target_os = "macos")
+        && let Some(app) = determine_macos_app_path(&current_exe)
+    {
         return Some(UpdateInstallType::App(app.to_path_buf()));
     }
 
@@ -140,7 +158,13 @@ fn determine_macos_app_path(current_exe: &Path) -> Option<&Path> {
     Some(parent3)
 }
 
-pub async fn install_update(http_client: reqwest::Client, dirs: Arc<LauncherDirectories>, send: FrontendHandle, update: UpdatePrompt, modal_action: ModalAction) {
+pub async fn install_update(
+    http_client: reqwest::Client,
+    dirs: Arc<LauncherDirectories>,
+    send: FrontendHandle,
+    update: UpdatePrompt,
+    modal_action: ModalAction,
+) {
     if let Err(error) = install_update_inner(http_client, &dirs, send.clone(), update, modal_action.clone()).await {
         modal_action.set_finished_with_error(error);
     }
@@ -149,7 +173,13 @@ pub async fn install_update(http_client: reqwest::Client, dirs: Arc<LauncherDire
     send.send(MessageToFrontend::Refresh);
 }
 
-async fn install_update_inner(http_client: reqwest::Client, dirs: &LauncherDirectories, send: FrontendHandle, update: UpdatePrompt, modal_action: ModalAction) -> Result<(), Arc<str>> {
+async fn install_update_inner(
+    http_client: reqwest::Client,
+    dirs: &LauncherDirectories,
+    send: FrontendHandle,
+    update: UpdatePrompt,
+    modal_action: ModalAction,
+) -> Result<(), Arc<str>> {
     let title = format!("Downloading Pandora {}", update.new_version);
     let tracker = modal_action.push_tracker(title.into());
 
@@ -207,7 +237,7 @@ async fn install_update_inner(http_client: reqwest::Client, dirs: &LauncherDirec
         Err(err) => {
             return Err(format!("Error while validating signature: {:?}", err).into());
         },
-        Ok(_) => {}
+        Ok(_) => {},
     }
 
     match update.install_type {
@@ -242,7 +272,10 @@ async fn install_update_inner(http_client: reqwest::Client, dirs: &LauncherDirec
         UpdateInstallType::App(current_app_folder) => {
             let mut temp_extract = dirs.temp_dir.join(format!("app_unpack_{}", rand::thread_rng().next_u64()));
             while temp_extract.exists() {
-                log::warn!("Randomly generated app_unpack folder exists... what are the chances? ({:?})", temp_extract);
+                log::warn!(
+                    "Randomly generated app_unpack folder exists... what are the chances? ({:?})",
+                    temp_extract
+                );
                 temp_extract = dirs.temp_dir.join(format!("app_unpack_{}", rand::thread_rng().next_u64()));
             }
 
@@ -271,7 +304,10 @@ async fn install_update_inner(http_client: reqwest::Client, dirs: &LauncherDirec
 fn add_new_extension(path: &Path) -> PathBuf {
     let mut new_exe_data = path.with_added_extension(format!("{}.new", rand::thread_rng().next_u64()));
     while new_exe_data.exists() {
-        log::warn!("Randomly generated new_exe_data file exists... what are the chances? ({:?})", new_exe_data);
+        log::warn!(
+            "Randomly generated new_exe_data file exists... what are the chances? ({:?})",
+            new_exe_data
+        );
         new_exe_data = path.with_added_extension(format!("{}.new", rand::thread_rng().next_u64()));
     }
     return new_exe_data;
@@ -321,7 +357,7 @@ fn try_canonicalize(path: &Path) -> Option<PathBuf> {
     if cfg!(windows) {
         let path_bytes = path.as_os_str().as_encoded_bytes();
         let canonical_bytes = canonical.as_os_str().as_encoded_bytes();
-        if canonical_bytes.len() == path_bytes.len()+4
+        if canonical_bytes.len() == path_bytes.len() + 4
             && &canonical_bytes[..4] == b"\\\\?\\"
             && &canonical_bytes[4..] == path_bytes
         {
@@ -423,9 +459,7 @@ fn move_new_exe_into(old_exe_path: PathBuf, new_exe_path: PathBuf, new_exe_data:
             };
 
             match result {
-                Ok(status) if status.success() => {
-                    return Ok(())
-                },
+                Ok(status) if status.success() => return Ok(()),
                 Ok(status) => {
                     log::error!("Error completing elevated executable install: {}", status);
                     return Err("Error completing elevated executable installation, see logs for more details".into());
@@ -450,7 +484,12 @@ fn move_new_exe_into(old_exe_path: PathBuf, new_exe_path: PathBuf, new_exe_data:
     Ok(())
 }
 
-fn install_app_update(current_app_folder: PathBuf, bytes: &[u8], temp_extract: &Path, temp_backup: &Path) -> Result<(), Arc<str>> {
+fn install_app_update(
+    current_app_folder: PathBuf,
+    bytes: &[u8],
+    temp_extract: &Path,
+    temp_backup: &Path,
+) -> Result<(), Arc<str>> {
     let gz_decoder = flate2::bufread::GzDecoder::new(Cursor::new(bytes));
     let mut archive = tar::Archive::new(gz_decoder);
 
@@ -477,7 +516,7 @@ fn install_app_update(current_app_folder: PathBuf, bytes: &[u8], temp_extract: &
         Err(err) => {
             log::error!("Unable to backup current .app: {}", err);
             return Err("I/O error while backing up current .app, see logs for more details".into());
-        }
+        },
     };
 
     if needs_authorization && temp_backup.exists() {
@@ -543,11 +582,12 @@ fn run_admin_powershell(script: &OsStr) -> std::process::ExitStatus {
         let mut sei: windows::Win32::UI::Shell::SHELLEXECUTEINFOW = std::mem::zeroed();
         _ = windows::Win32::System::Com::CoInitializeEx(
             None,
-            windows::Win32::System::Com::COINIT_APARTMENTTHREADED |  windows::Win32::System::Com::COINIT_DISABLE_OLE1DDE,
+            windows::Win32::System::Com::COINIT_APARTMENTTHREADED | windows::Win32::System::Com::COINIT_DISABLE_OLE1DDE,
         );
 
         use std::os::windows::ffi::OsStrExt;
-        let encoded = crate::join_windows_shell_os(&[OsStr::new("-Command"), script]).encode_wide()
+        let encoded = crate::join_windows_shell_os(&[OsStr::new("-Command"), script])
+            .encode_wide()
             .chain(OsStr::new("\0").encode_wide())
             .collect::<Vec<_>>();
 
@@ -562,7 +602,10 @@ fn run_admin_powershell(script: &OsStr) -> std::process::ExitStatus {
             return std::mem::transmute(!0);
         }
 
-        windows::Win32::System::Threading::WaitForSingleObject(sei.hProcess, windows::Win32::System::Threading::INFINITE);
+        windows::Win32::System::Threading::WaitForSingleObject(
+            sei.hProcess,
+            windows::Win32::System::Threading::INFINITE,
+        );
 
         let mut code = 0;
         if windows::Win32::System::Threading::GetExitCodeProcess(sei.hProcess, &mut code).is_err() {

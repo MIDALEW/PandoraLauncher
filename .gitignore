@@ -4,5 +4,6 @@ perf.data*
 client_id.txt
 flamegraph.svg
 heaptrack*
+install_arch.sh
 .DS_Store
 .idea/
