@@ -9,7 +9,7 @@ use rustc_hash::FxHashMap;
 use schema::{
     assets_index::AssetsIndex,
     curseforge::{
-        CurseforgeChangelogRequest, CurseforgeChangelogResult, CurseforgeFingerprintRequest, CurseforgeFingerprintResponse, CurseforgeGetFilesRequest, CurseforgeGetModFilesRequest, CurseforgeGetModFilesResult, CurseforgeProject, CurseforgeSearchRequest, CurseforgeSearchResult
+        CurseforgeChangelogRequest, CurseforgeChangelogResult, CurseforgeFingerprintRequest, CurseforgeFingerprintResponse, CurseforgeGetFilesRequest, CurseforgeGetModFilesRequest, CurseforgeGetModFilesResult, CurseforgeGetModsRequest, CurseforgeGetModsResult, CurseforgeProject, CurseforgeSearchRequest, CurseforgeSearchResult
     },
     fabric_launch::FabricLaunch, fabric_loader_manifest::FabricLoaderManifest,
     forge::{ForgeMavenManifest, NeoforgeMavenManifest}, java_runtime_component::JavaRuntimeComponentManifest,
@@ -95,6 +95,7 @@ pub struct MetadataManagerStates {
     pub(super) curseforge_get_files: HashMap<CurseforgeGetFilesRequest, MetaStateWrapper<CurseforgeGetModFilesResult>>,
     pub(super) curseforge_changelogs: HashMap<CurseforgeChangelogRequest, MetaStateWrapper<CurseforgeChangelogResult>>,
     pub(super) curseforge_fingerprints: HashMap<CurseforgeFingerprintRequest, MetaStateWrapper<CurseforgeFingerprintResponse>>,
+    pub(super) curseforge_get_mods: HashMap<CurseforgeGetModsRequest, MetaStateWrapper<CurseforgeGetModsResult>>,
     pub(super) curseforge_projects: HashMap<u32, MetaStateWrapper<CurseforgeProject>>,
 }
 

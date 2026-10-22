@@ -7,3 +7,4 @@ heaptrack*
 install_arch.sh
 .DS_Store
 .idea/
+test/

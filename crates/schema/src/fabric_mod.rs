@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use serde::Deserialize;
+use serde_json::Value;
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -44,4 +45,25 @@ impl Person {
             Person::NameAndContact { name, .. } => name,
         }
     }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct QuiltModJson {
+    pub quilt_loader: QuiltLoader,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct QuiltLoader {
+    pub id: Arc<str>,
+    pub version: Arc<str>,
+    #[serde(default)]
+    pub metadata: Option<QuiltMetadata>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct QuiltMetadata {
+    pub name: Option<Arc<str>>,
+    #[serde(default)]
+    pub contributors: HashMap<Arc<str>, Value>,
+    pub icon: Option<Icon>,
 }

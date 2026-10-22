@@ -570,6 +570,13 @@ impl BackendState {
                     self.send.send_warning("Cannot modify mods folder while instance is running");
                 }
             },
+            MessageToBackend::GenerateMetadata { instance: id, content_ids, modal_action } => {
+                let this = self.clone();
+                tokio::spawn(async move {
+                    crate::generate_metadata::generate_metadata(this, id, content_ids, &modal_action).await;
+                    modal_action.set_finished();
+                });
+            },
             MessageToBackend::UpdateCheck { instance: id, modal_action } => {
                 let (loader, version, update_channel) = if let Some(instance) = self.instance_state.write().instances.get_mut(id) {
                     let configuration = instance.configuration.get();

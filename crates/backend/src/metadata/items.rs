@@ -6,7 +6,7 @@ use reqwest::RequestBuilder;
 use schema::{
     assets_index::AssetsIndex,
     curseforge::{
-        CURSEFORGE_API_KEY, CURSEFORGE_SEARCH_URL, CurseforgeChangelogRequest, CurseforgeChangelogResult, CurseforgeFingerprintRequest, CurseforgeFingerprintResponse, CurseforgeGetFilesRequest, CurseforgeGetModFilesRequest, CurseforgeGetModFilesResult, CurseforgeProject, CurseforgeProjectResponse, CurseforgeSearchRequest, CurseforgeSearchResult, MINECRAFT_GAME_ID
+        CURSEFORGE_API_KEY, CURSEFORGE_SEARCH_URL, CurseforgeChangelogRequest, CurseforgeChangelogResult, CurseforgeFingerprintRequest, CurseforgeFingerprintResponse, CurseforgeGetFilesRequest, CurseforgeGetModFilesRequest, CurseforgeGetModFilesResult, CurseforgeGetModsRequest, CurseforgeGetModsResult, CurseforgeProject, CurseforgeProjectResponse, CurseforgeSearchRequest, CurseforgeSearchResult, MINECRAFT_GAME_ID
     },
     fabric_launch::FabricLaunch,
     fabric_loader_manifest::{FABRIC_LOADER_MANIFEST_URL, FabricLoaderManifest},
@@ -739,6 +739,36 @@ impl<'a> MetadataItem for CurseforgeFingerprintMetadataItem<'a> {
 
     fn state(&self, states: &mut MetadataManagerStates) -> MetaStateWrapper<Self::T> {
         states.curseforge_fingerprints.entry(self.0.clone()).or_default().clone()
+    }
+
+    fn deserialize(bytes: &[u8]) -> Result<Self::T, MetaLoadError> {
+        Ok(serde_json::from_slice(bytes)?)
+    }
+}
+
+#[derive(Debug)]
+pub struct CurseforgeGetModsMetadataItem<'a>(pub &'a CurseforgeGetModsRequest);
+
+impl<'a> MetadataItem for CurseforgeGetModsMetadataItem<'a> {
+    type T = CurseforgeGetModsResult;
+
+    fn request(&self, client: &reqwest::Client) -> RequestBuilder {
+        let ids = self.0.mod_ids.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
+        client.get("https://api.curseforge.com/v1/mods")
+            .query(&[("modIds", ids)])
+            .header("x-api-key", CURSEFORGE_API_KEY)
+    }
+
+    fn host(&self) -> &str {
+        "api.curseforge.com"
+    }
+
+    fn expires(&self) -> bool {
+        true
+    }
+
+    fn state(&self, states: &mut MetadataManagerStates) -> MetaStateWrapper<Self::T> {
+        states.curseforge_get_mods.entry(self.0.clone()).or_default().clone()
     }
 
     fn deserialize(bytes: &[u8]) -> Result<Self::T, MetaLoadError> {

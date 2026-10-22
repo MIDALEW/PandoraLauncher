@@ -60,6 +60,12 @@ pub struct CurseforgeFingerprintRequest {
     pub fingerprints: Vec<u32>,
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurseforgeGetModsRequest {
+    pub mod_ids: Vec<u32>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CurseforgeSearchResult {
     pub data: Arc<[CurseforgeHit]>,
@@ -69,6 +75,11 @@ pub struct CurseforgeSearchResult {
 #[derive(Debug, Deserialize)]
 pub struct CurseforgeGetModFilesResult {
     pub data: Arc<[CurseforgeFile]>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CurseforgeGetModsResult {
+    pub data: Arc<[CurseforgeProject]>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -185,7 +196,10 @@ pub struct CurseforgeProjectLinks {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CurseforgeProject {
+    #[serde(default)]
+    pub id: u32,
     pub name: Arc<str>,
+    pub slug: Option<Arc<str>>,
     pub links: CurseforgeProjectLinks,
 }
 

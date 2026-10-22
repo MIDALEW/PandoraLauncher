@@ -376,6 +376,41 @@ pub fn update_single_mod(
     modals::generic::show_notification(window, cx, t::instance::content::update::download::error().into(), modal_action);
 }
 
+pub fn generate_metadata(
+    instance: InstanceID,
+    content_ids: Vec<InstanceContentID>,
+    hashes: Vec<u64>,
+    updating: &Arc<Mutex<FxHashSet<u64>>>,
+    backend_handle: &BackendHandle,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let modal_action = ModalAction::default();
+
+    {
+        let mut updating = updating.lock();
+        updating.extend(hashes.iter().copied());
+    }
+    modal_action.add_finish_effect({
+        let updating = updating.clone();
+        let hashes = hashes.clone();
+        move || {
+            let mut updating = updating.lock();
+            for hash in &hashes {
+                updating.remove(hash);
+            }
+        }
+    });
+
+    backend_handle.send(MessageToBackend::GenerateMetadata {
+        instance,
+        content_ids,
+        modal_action: modal_action.clone(),
+    });
+
+    modals::generic::show_notification(window, cx, t::instance::content::generate_metadata::error().into(), modal_action);
+}
+
 pub fn upload_log_file(
     path: Arc<Path>,
     backend_handle: &BackendHandle,

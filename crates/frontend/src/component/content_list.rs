@@ -205,7 +205,8 @@ impl ContentListDelegate {
             ContentSource::CurseforgeProject { .. } => t::curseforge::name(),
             _ => t::common::unknown(),
         };
-        let update_button = match status {
+        let can_generate_metadata = matches!(&summary.content_source, ContentSource::Manual | ContentSource::ModrinthUnknown);
+        let mut update_button = match status {
             bridge::instance::ContentUpdateStatus::Unknown | bridge::instance::ContentUpdateStatus::ManualInstall => {
                 if summary.content_source == ContentSource::Manual {
                     Some(
@@ -278,6 +279,36 @@ impl ContentListDelegate {
                 )
             },
         };
+
+        if can_generate_metadata {
+            let backend_handle = self.backend_handle.clone();
+            let updating = self.updating.clone();
+            update_button = Some(
+                Button::new(("generate_metadata", element_id)).icon(PandoraIcon::WandSparkles)
+                    .loading(is_loading)
+                    .tooltip(t::instance::content::generate_metadata::tooltip())
+                    .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                        cx.stop_propagation();
+
+                        let delegate = this.delegate();
+                        let mut content_ids = Vec::new();
+                        let mut hashes = Vec::new();
+                        if delegate.is_selected(element_id) {
+                            for summary in &delegate.content {
+                                if delegate.is_selected(summary.filename_hash) {
+                                    content_ids.push(summary.id);
+                                    hashes.push(summary.filename_hash);
+                                }
+                            }
+                        } else {
+                            content_ids.push(content_id);
+                            hashes.push(element_id);
+                        }
+
+                        crate::root::generate_metadata(id, content_ids, hashes, &updating, &backend_handle, window, cx);
+                    }))
+            );
+        }
 
         let unzip_button = if summary.content_summary.extra.modpack_files().is_some() {
             Some(Button::new(("unzip", element_id))

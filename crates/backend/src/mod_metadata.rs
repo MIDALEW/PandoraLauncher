@@ -9,7 +9,7 @@ use parking_lot::{RwLock, RwLockReadGuard};
 use rayon::iter::{IntoParallelRefIterator, ParallelExtend, ParallelIterator};
 use rc_zip_sync::EntryHandle;
 use rustc_hash::{FxHashMap, FxHashSet};
-use schema::{content::ContentSource, curseforge::{CachedCurseforgeFileInfo, CurseforgeFile, CurseforgeModpackManifestJson}, fabric_mod::{FabricModJson, Icon, Person}, forge_mod::{JarJarMetadata, McModInfo, ModsToml}, loader::Loader, modrinth::{ModrinthFile, ModrinthSideRequirement}, mrpack::ModrinthIndexJson, resourcepack::PackMcmeta, unique_bytes::UniqueBytes};
+use schema::{content::ContentSource, curseforge::{CachedCurseforgeFileInfo, CurseforgeFile, CurseforgeModpackManifestJson}, fabric_mod::{FabricModJson, Icon, Person, QuiltModJson}, forge_mod::{JarJarMetadata, McModInfo, ModsToml}, loader::Loader, modrinth::{ModrinthFile, ModrinthSideRequirement}, mrpack::ModrinthIndexJson, resourcepack::PackMcmeta, unique_bytes::UniqueBytes};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DeserializeAs};
 use sha1::{Digest, Sha1};
@@ -48,6 +48,7 @@ impl ContentUpdateAction {
 enum ZipMetadataFile {
     McModInfo, // Legacy forge mod
     FabricModJson,
+    QuiltModJson,
     ModsToml,
     NeoforgeModsToml,
     JarJar,
@@ -61,6 +62,8 @@ impl ZipMetadataFile {
     pub fn priority(self, extension: Option<&OsStr>) -> i32 {
         let mut priority = match self {
             ZipMetadataFile::McModInfo => 1, // If a legacy forge mod manifest is present, that's probably the one we want
+            ZipMetadataFile::FabricModJson => 0,
+            ZipMetadataFile::QuiltModJson => -1, // Prefer fabric.mod.json when a Quilt mod includes both
             ZipMetadataFile::JarJar => -1, // Fallback
             ZipMetadataFile::JavaManifest => -2,  // Fallback
             _ => 0,
@@ -77,6 +80,7 @@ impl ZipMetadataFile {
         match self {
             ZipMetadataFile::McModInfo => Some(OsStr::new("jar")),
             ZipMetadataFile::FabricModJson => Some(OsStr::new("jar")),
+            ZipMetadataFile::QuiltModJson => Some(OsStr::new("jar")),
             ZipMetadataFile::ModsToml => Some(OsStr::new("jar")),
             ZipMetadataFile::NeoforgeModsToml => Some(OsStr::new("jar")),
             ZipMetadataFile::JarJar => Some(OsStr::new("jar")),
@@ -91,6 +95,7 @@ impl ZipMetadataFile {
         match path {
             "mcmod.info" => Some(ZipMetadataFile::McModInfo),
             "fabric.mod.json" => Some(ZipMetadataFile::FabricModJson),
+            "quilt.mod.json" => Some(ZipMetadataFile::QuiltModJson),
             "META-INF/mods.toml" => Some(ZipMetadataFile::ModsToml),
             "META-INF/neoforge.mods.toml" => Some(ZipMetadataFile::NeoforgeModsToml),
             "META-INF/jarjar/metadata.json" => Some(ZipMetadataFile::JarJar),
@@ -364,6 +369,7 @@ impl ModMetadataManager {
             let summary = match zip_metadata_file {
                 ZipMetadataFile::McModInfo => self.load_legacy_forge_mod(hash, filesize, &archive, file),
                 ZipMetadataFile::FabricModJson => self.load_fabric_mod(hash, filesize, &archive, file),
+                ZipMetadataFile::QuiltModJson => self.load_quilt_mod(hash, filesize, &archive, file),
                 ZipMetadataFile::ModsToml => self.load_forge_mod(hash, filesize, &archive, file, ContentType::Forge),
                 ZipMetadataFile::NeoforgeModsToml => self.load_forge_mod(hash, filesize, &archive, file, ContentType::NeoForge),
                 ZipMetadataFile::JarJar => self.load_jarjar(hash, filesize, &archive, file),
@@ -442,6 +448,69 @@ impl ModMetadataManager {
             name: Some(name),
             authors,
             version_str: create_version_string(&fabric_mod_json.version),
+            rich_description: None,
+            png_icon,
+            extra: ContentType::Fabric
+        }))
+    }
+
+    fn load_quilt_mod<R: rc_zip_sync::HasCursor>(self: &Arc<Self>, hash: [u8; 20], filesize: Option<u64>, archive: &rc_zip_sync::ArchiveHandle<R>, file: EntryHandle<'_, R>) -> Option<Arc<ContentSummary>> {
+        let mut bytes = file.bytes().ok()?;
+
+        // Some mods violate the JSON spec by using raw newline characters inside strings.
+        for byte in bytes.iter_mut() {
+            if *byte == b'\n' {
+                *byte = b' ';
+            }
+        }
+
+        let quilt_mod_json: QuiltModJson = serde_json::from_slice(&bytes).inspect_err(|e| {
+            log::error!("Error parsing quilt.mod.json: {e}");
+        }).ok()?;
+
+        drop(file);
+
+        let loader = quilt_mod_json.quilt_loader;
+        let metadata = loader.metadata.as_ref();
+
+        let name = metadata
+            .and_then(|metadata| metadata.name.clone())
+            .unwrap_or_else(|| Arc::clone(&loader.id));
+
+        let icon = metadata
+            .and_then(|metadata| metadata.icon.as_ref())
+            .and_then(|icon| match icon {
+                Icon::Single(icon) => Some(Arc::clone(icon)),
+                Icon::Sizes(hash_map) => {
+                    const DESIRED_SIZE: usize = 64;
+                    hash_map.iter()
+                        .min_by_key(|size| size.0.abs_diff(DESIRED_SIZE))
+                        .map(|entry| Arc::clone(entry.1))
+                },
+            });
+
+        let mut png_icon: Option<UniqueBytes> = None;
+        if let Some(icon) = icon && let Some(icon_file) = archive.by_name(&icon) {
+            png_icon = load_icon(icon_file);
+        }
+
+        let authors = metadata.map(|metadata| {
+            let mut names: Vec<&str> = metadata.contributors.keys().map(|name| name.as_ref()).collect();
+            names.sort_unstable();
+            if names.is_empty() {
+                None
+            } else {
+                Some(format!("By {}", names.join(", ")))
+            }
+        }).flatten().unwrap_or_default();
+
+        Some(Arc::new(ContentSummary {
+            id: Some(loader.id),
+            hash,
+            filesize,
+            name: Some(name),
+            authors: authors.into(),
+            version_str: create_version_string(&loader.version),
             rich_description: None,
             png_icon,
             extra: ContentType::Fabric

@@ -212,6 +212,11 @@ pub enum MessageToBackend {
         instance: InstanceID,
         modal_action: ModalAction
     },
+    GenerateMetadata {
+        instance: InstanceID,
+        content_ids: Vec<InstanceContentID>,
+        modal_action: ModalAction
+    },
     UpdateContent {
         instance: InstanceID,
         content_id: InstanceContentID,

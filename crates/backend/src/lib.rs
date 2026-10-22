@@ -14,6 +14,7 @@ mod directories;
 mod duplicate;
 mod export;
 mod fs;
+mod generate_metadata;
 mod install_content;
 mod instance;
 mod java_manifest;
